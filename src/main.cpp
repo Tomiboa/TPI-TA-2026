@@ -1,5 +1,4 @@
 // TPI - Tecnologias para la Automatizacion 4k01/26 - Grupo 13
-// Paso 2: Integracion de ControlPlaca (Potenciometro, Umbral, LEDs y Modo Auto).
 
 #include <Arduino.h>
 #include <WiFi.h>
@@ -8,18 +7,21 @@
 #include "Configuracion.h"
 #include "SensorDHT.h"
 #include "ControlPlaca.h"
+#include "DisplayOLED.h"
 
 // ---------- Objetos globales ----------
 WiFiClientSecure clienteSeguro;
 UniversalTelegramBot bot(BOT_TOKEN, clienteSeguro);
 SensorDHT sensorClima(PIN_DHT);
 ControlPlaca placa(PIN_POT, PIN_LED_VERDE, PIN_LED_AZUL);
+DisplayOLED oled(PIN_OLED_SDA, PIN_OLED_SCL);
 
 unsigned long ultimoChequeoBot = 0;
 
 // ---------- Wi-Fi ----------
 void conectarWiFi() {
   Serial.print("Conectando a Wi-Fi");
+  oled.mostrarEstado("Conectando WiFi", WIFI_SSID);
   WiFi.mode(WIFI_STA);
   WiFi.begin(WIFI_SSID, WIFI_PASS);
   while (WiFi.status() != WL_CONNECTED) {
@@ -28,6 +30,7 @@ void conectarWiFi() {
   }
   Serial.print("\nConectado. IP: ");
   Serial.println(WiFi.localIP());
+  oled.mostrarEstado("WiFi Conectado", WiFi.localIP().toString());
 }
 
 // ---------- Comandos ----------
@@ -39,10 +42,14 @@ void enviarMenu(const String &chatId) {
     "⚙️ <b>Control</b>\n"
     "/umbral &lt;valor&gt; - Fijar umbral (ej: /umbral 1.2)\n"
     "/autoon - Activar modo automático\n"
-    "/autooff - Desactivar modo automático\n"
-    "/verdeon | /verdeoff - Control manual LED Verde\n"
-    "/azulon | /azuloff - Control manual LED Azul\n\n"
-    "✍️ <i>Escribí el comando como texto.</i>";
+    "/autooff - Desactivar modo automático\n\n"
+    "☁️ <b>Nube</b>\n"
+    "/thingup - Subir datos a ThingSpeak\n\n"
+    "🖥️ <b>Display OLED</b>\n"
+    "/displayled - Estado del LED\n"
+    "/displaypot - Estado del potenciómetro\n"
+    "/displaydht - Estado del DHT22\n\n"
+    "<i>Escribí el comando como texto.</i>";
   bot.sendMessage(chatId, menu, "HTML");
 }
 
@@ -51,7 +58,7 @@ void procesarMensaje(int i) {
   String texto  = bot.messages[i].text;
   texto.trim();
 
-  // Separar comando de argumento (ej: "/umbral 1.2")
+  // Separar comando y argumento (para /umbral <valor>)
   String cmd = texto;
   String arg = "";
   int espacio = texto.indexOf(' ');
@@ -66,16 +73,19 @@ void procesarMensaje(int i) {
   Serial.println("Mensaje de " + bot.messages[i].from_name + ": " + texto);
 
   if (cmd == "/start") {
+    oled.registrarComando("/start");
     enviarMenu(chatId);
   } 
   else if (cmd == "/umbral") {
+    oled.registrarComando("/umbral");
     if (placa.actualizarUmbral(arg)) {
       bot.sendMessage(chatId, "✅ Umbral actualizado a <b>" + String(placa.getUmbral(), 2) + " V</b>", "HTML");
     } else {
-      bot.sendMessage(chatId, "⚠️ Fuera de rango [1.0; 1.5]V. Se asume valor por defecto: <b>0.50 V</b>", "HTML");
+      bot.sendMessage(chatId, "⚠️ Fuera de rango [1.0; 1.5]V. Se asume valor original: <b>0.50 V</b>", "HTML");
     }
   }
   else if (cmd == "/estado") {
+    oled.registrarComando("/estado");
     float t = sensorClima.temperatura();
     float h = sensorClima.humedad();
     float v = placa.leerVoltajePot();
@@ -91,25 +101,48 @@ void procesarMensaje(int i) {
   }
   else if (cmd == "/autoon") {
     placa.setModoAuto(true);
+    placa.setLedVerde(false);
+    oled.registrarComando("/autoon");
     bot.sendMessage(chatId, "🔄 <b>Modo Automático ACTIVADO</b>\nLínea base: " + String(placa.getLineaBase(), 2) + " V", "HTML");
   }
   else if (cmd == "/autooff") {
     placa.setModoAuto(false);
-    bot.sendMessage(chatId, "🖐️ <b>Modo Automático DESACTIVADO</b> (Manual)", "HTML");
+    placa.setLedVerde(true); // Enciende LED Verde indicando modo manual activo
+    oled.registrarComando("/autooff");
+    bot.sendMessage(chatId, "<b>Modo Automático DESACTIVADO</b> (Manual)", "HTML");
   }
-  else if (cmd == "/verdeon" || cmd == "/verdeoff" || cmd == "/azulon" || cmd == "/azuloff") {
-    if (placa.isModoAuto() && (cmd == "/azulon" || cmd == "/azuloff")) {
-      bot.sendMessage(chatId, "⚠️ El LED Azul está en modo automático. Mandá /autooff primero.", "HTML");
-    } else {
-      if (cmd == "/verdeon")  placa.setLedVerde(true);
-      if (cmd == "/verdeoff") placa.setLedVerde(false);
-      if (cmd == "/azulon")   placa.setLedAzul(true);
-      if (cmd == "/azuloff")  placa.setLedAzul(false);
-      bot.sendMessage(chatId, "✅ LED actualizado.", "HTML");
+  else if (cmd.startsWith("/display")) {
+    String subCmd = cmd.substring(8);
+    subCmd.toLowerCase();
+
+    if (subCmd == "led") {
+      oled.registrarComando("/displayled");
+      String estado = placa.getEstadoLedAzul() ? "Led encendido" : "Led apagado";
+      oled.mostrarEstado("Estado LED:", estado);
+      bot.sendMessage(chatId, "🖥️ Mostrando en OLED: <b>" + estado + "</b>", "HTML");
+    }
+    else if (subCmd == "pot") {
+      oled.registrarComando("/displaypot");
+      String det = String(placa.leerVoltajePot(), 2) + "V (Umb:" + String(placa.getUmbral(), 2) + "V)";
+      oled.mostrarEstado("Potenciometro:", det);
+      bot.sendMessage(chatId, "🖥️ Estado del potenciómetro mostrado en OLED.", "HTML");
+    }
+    else if (subCmd == "dht" || subCmd == "dht22" || subCmd == "dth22") {
+      oled.registrarComando("/displaydht");
+      float t = sensorClima.temperatura();
+      float h = sensorClima.humedad();
+      String det = "T:" + String(t, 1) + "C H:" + String(h, 1) + "%";
+      oled.mostrarEstado("Sensor DHT22:", det);
+      bot.sendMessage(chatId, " Estado del DHT22 mostrado en OLED.", "HTML");
+    }
+    else {
+      // Informa el error en la pantalla OLED sin meterlo al búfer de comandos exitosos
+      oled.mostrarEstado("Error Display:", "Cmd no identificado");
+      bot.sendMessage(chatId, "⚠️ Comando de display no identificado. Informado en pantalla.", "HTML");
     }
   }
   else {
-    bot.sendMessage(chatId, "❓ Comando no reconocido. Mandá /start para ver el menú.", "");
+    bot.sendMessage(chatId, " Comando no reconocido. Mandá /start para ver el menú.", "");
   }
 }
 
@@ -129,8 +162,10 @@ void setup() {
 
   placa.begin();
   sensorClima.begin();
+  oled.begin();
+
   conectarWiFi();
-  clienteSeguro.setCACert(TELEGRAM_CERTIFICATE_ROOT);
+  clienteSeguro.setInsecure();
 
   Serial.println("Bot listo. Mandale /start por Telegram.");
 }

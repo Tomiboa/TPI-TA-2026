@@ -5,7 +5,7 @@
 
 // --- Credenciales: se definen en secrets.h (NO se sube a GitHub) ---
 // Copiar include/secrets_example.h como include/secrets.h y completar.
-#include "secrets.h"
+#include "secrets_example.h"
 const char* const TS_SERVER   = "http://api.thingspeak.com/update";
 
 // --- Pines Asignados (Placa UTN Evaluation Board V1.0) ---
