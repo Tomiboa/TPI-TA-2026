@@ -3,12 +3,10 @@
 
 #include <Arduino.h>
 
-// --- Credenciales (Para Wokwi usa "Wokwi-GUEST" y ""; para la placa física tu red) ---
-const char* const WIFI_SSID   = "Wokwi-GUEST";
-const char* const WIFI_PASS   = "";
-#define BOT_TOKEN               "TU_BOT_TOKEN_TELEGRAM"
+// --- Credenciales: se definen en secrets.h (NO se sube a GitHub) ---
+// Copiar include/secrets_example.h como include/secrets.h y completar.
+#include "secrets.h"
 const char* const TS_SERVER   = "http://api.thingspeak.com/update";
-const char* const TS_API_KEY  = "TU_THINGSPEAK_WRITE_API_KEY";
 
 // --- Pines Asignados (Placa UTN Evaluation Board V1.0) ---
 const short PIN_DHT       = 33;
