@@ -8,6 +8,7 @@
 #define WIFI_PASS   ""
 
 #define BOT_TOKEN   "9130100660:AAE1OUIEUYfC3fdDc9JhDvDN5MtW2K7PZ8Q"
-#define TS_API_KEY  "PEGAR_WRITE_API_KEY_DE_THINGSPEAK"
+#define TS_CHANNEL_ID 3580136  // ID numerico del canal de ThingSpeak
+#define TS_API_KEY  "5WZ9TNUYAI6SNNVP"
 
 #endif

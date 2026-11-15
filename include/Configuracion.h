@@ -6,7 +6,6 @@
 // --- Credenciales: se definen en secrets.h (NO se sube a GitHub) ---
 // Copiar include/secrets_example.h como include/secrets.h y completar.
 #include "secrets_example.h"
-const char* const TS_SERVER   = "http://api.thingspeak.com/update";
 
 // --- Pines Asignados (Placa UTN Evaluation Board V1.0) ---
 const short PIN_DHT       = 33;
@@ -22,6 +21,6 @@ const float UMBRAL_MIN     = 1.0;
 const float UMBRAL_MAX     = 1.5;
 
 const unsigned long INTERVALO_BOT = 1000;  // 1 segundo
-const unsigned long INTERVALO_TS  = 30000; // 30 segundos
+const unsigned long INTERVALO_TS  = 30000; // 30 segundos (ThingSpeak exige minimo 15 s)
 
 #endif

@@ -8,6 +8,7 @@
 #include "SensorDHT.h"
 #include "ControlPlaca.h"
 #include "DisplayOLED.h"
+#include "NubeThingSpeak.h"
 
 // ---------- Objetos globales ----------
 WiFiClientSecure clienteSeguro;
@@ -15,8 +16,10 @@ UniversalTelegramBot bot(BOT_TOKEN, clienteSeguro);
 SensorDHT sensorClima(PIN_DHT);
 ControlPlaca placa(PIN_POT, PIN_LED_VERDE, PIN_LED_AZUL);
 DisplayOLED oled(PIN_OLED_SDA, PIN_OLED_SCL);
+NubeThingSpeak nube(TS_CHANNEL_ID, TS_API_KEY);
 
 unsigned long ultimoChequeoBot = 0;
+unsigned long ultimoEnvioTS = 0;
 
 // ---------- Wi-Fi ----------
 void conectarWiFi() {
@@ -31,6 +34,13 @@ void conectarWiFi() {
   Serial.print("\nConectado. IP: ");
   Serial.println(WiFi.localIP());
   oled.mostrarEstado("WiFi Conectado", WiFi.localIP().toString());
+}
+
+// ---------- ThingSpeak ----------
+// Lee el DHT22 y sube temperatura y humedad al canal. Devuelve el codigo de ThingSpeak.
+int subirAThingSpeak() {
+  ultimoEnvioTS = millis(); // Reinicia el periodo para no superar el limite de 15 s
+  return nube.enviar(sensorClima.temperatura(), sensorClima.humedad());
 }
 
 // ---------- Comandos ----------
@@ -111,6 +121,17 @@ void procesarMensaje(int i) {
     oled.registrarComando("/autooff");
     bot.sendMessage(chatId, "<b>Modo Automático DESACTIVADO</b> (Manual)", "HTML");
   }
+  else if (cmd == "/thingup") {
+    float t = sensorClima.temperatura();
+    float h = sensorClima.humedad();
+    int codigo = subirAThingSpeak();
+    if (codigo == TS_ENVIO_OK) {
+      oled.registrarComando("/thingup");
+      bot.sendMessage(chatId, "☁️ <b>Datos enviados a ThingSpeak</b>\n🌡️ Temp: <b>" + String(t, 1) + " °C</b> | 💧 Hum: <b>" + String(h, 1) + " %</b>", "HTML");
+    } else {
+      bot.sendMessage(chatId, "⚠️ No se pudo enviar a ThingSpeak: " + nube.describirCodigo(codigo), "HTML");
+    }
+  }
   else if (cmd.startsWith("/display")) {
     String subCmd = cmd.substring(8);
     subCmd.toLowerCase();
@@ -166,6 +187,7 @@ void setup() {
 
   conectarWiFi();
   clienteSeguro.setInsecure();
+  nube.begin();
 
   Serial.println("Bot listo. Mandale /start por Telegram.");
 }
@@ -176,5 +198,10 @@ void loop() {
   if (millis() - ultimoChequeoBot >= INTERVALO_BOT) {
     ultimoChequeoBot = millis();
     revisarTelegram();
+  }
+
+  // Envio periodico de telemetria a ThingSpeak
+  if (millis() - ultimoEnvioTS >= INTERVALO_TS) {
+    subirAThingSpeak();
   }
 }
